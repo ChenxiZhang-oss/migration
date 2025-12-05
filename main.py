@@ -57,8 +57,8 @@ class Types:
 	}
         
     # 请不要修改move_type
-    move_type = {'move_in',
-                 'move_out'}
+    # 只抓取迁出情况
+    move_type = {'move_out'}
 
 
 def generate_date_range(start_date_str:"20190201", end_date_str:"20190204"):
@@ -187,15 +187,19 @@ def download_and_convert_jsonp(data_type: 'cityrank', dt: 'city', id: '420100', 
         # Decode JSON string, automatically handling Unicode characters
         json_data = json.loads(json_data_str)
 
-        # 如果要导出 CSV 文件，可以在这里操作json_data。可以修改下面的代码：
-        # if json_data['errmsg'] == 'SUCCESS':
-        #     data = json_data['data']['list']
-        #     file = pd.DataFrame({id: data}).T
-        #     csv_filename = f'./data/{translation_table[id]}_' \
-        #                    f'{translation_table[move_type]}_' \
-        #                    f'{translation_table[data_type]}_' \
-        #                    f'{date}.csv'
-        #     file.to_csv(csv_filename, encoding='utf-8')
+        # 导出 CSV 文件
+        if json_data.get('errmsg') == 'SUCCESS':
+            data_list = json_data.get('data', {}).get('list', [])
+            # data_list 是一个列表，元素包含 name, value 字段（省/市名称与占比）
+            df = pd.DataFrame(data_list)
+            csv_filename = (
+                f'./data/{translation_table.get(id, id)}_'
+                f'{translation_table.get(move_type, move_type)}_'
+                f'{translation_table.get(data_type, data_type)}_'
+                f'{date}.csv'
+            )
+            # 保存为 UTF-8，包含表头
+            df.to_csv(csv_filename, index=False, encoding='utf-8')
 
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, ensure_ascii=False, indent=2)
@@ -207,7 +211,7 @@ def download_and_convert_jsonp(data_type: 'cityrank', dt: 'city', id: '420100', 
         return None
 
 
-def get_data(region: '420100', data_type: 'cityrank', move_type: 'move_out', date: '20190201'):
+def get_data(region: str, data_type: str, move_type: str, date: str):
     timestamp = get_timestamp()
     print(f"正在获取"
           f' {translation_table[region]}'
@@ -253,9 +257,10 @@ def get_by_date(from_date, to_date, lastdate):
     from_date = from_date_dt.strftime('%Y%m%d')
     to_date = to_date_dt.strftime('%Y%m%d')
 
-    for region in Types.region.keys():
-        for move_type in Types.move_type:
-            get_historycurve(region, move_type)  # 获取他的迁徙规模指数
+    # 如需迁徙规模指数，可取消注释
+    # for region in Types.region.keys():
+    #     for move_type in Types.move_type:
+    #         get_historycurve(region, move_type)
 
     for date in generate_date_range(from_date, to_date):  # 日期
         for region in Types.region.keys():
@@ -263,6 +268,25 @@ def get_by_date(from_date, to_date, lastdate):
                 for data_type in Types.data_type:
                     get_data(region, data_type, move_type, date)
     print("完成")
+
+
+
+
+if __name__ == '__main__':
+    # 确保输出目录存在
+    os.makedirs('./data', exist_ok=True)
+
+    # 获取API最晚日期
+    lastdate = get_lastdate()
+    if not lastdate:
+        raise SystemExit('无法获取最晚日期，程序退出。')
+
+    # 设置起止日期：默认从API支持的最早日期到最晚日期
+    from_date = '20190201'
+    to_date = '20190204'
+
+    # 执行数据抓取
+    get_by_date(from_date, to_date, lastdate)
 
 
 
