@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 # import pyarrow
 from typing import List
+from admin_codes import CITY_CODES
 
 try:
     from selenium import webdriver
@@ -30,10 +31,13 @@ translation_table = {
     'city': '市',
     'move_in': '迁入',
     'move_out': '迁出',
-
-    # 如果你有其他省市数据需要获取，请修改这里
-	'420100': '武汉市',
 }
+
+# 从 admin_codes 导入城市代码映射
+translation_table.update(CITY_CODES)
+
+# 特定覆盖确保关键城市显示正确
+translation_table['420100'] = '武汉市'
 
 
 class Types:
@@ -41,20 +45,18 @@ class Types:
     存储我们已知和要请求的一些数据。
     """
     # 请不要修改data_type
-    data_type = {  # 'lastdate',     # 虽然 lastdate 确实是一个接口，但是我们在每次爬取时
-                                     # 只需在最开始调用一次就可以了。所以我们在设计时排除之。
-                   # 'historycurve', # 虽然 historycurve 确实是一个接口，但是这个接口会返回
-                                     # 所有日期的这个数据。所以只用调用一次就可以了
-                 'cityrank',
-                 'provincerank'}
+    data_type = {
+        'provincerank'
+    }
     # 请不要修改dt
     dt = {'country',
           'province',
           'city'}
     # 如果你有其他省市数据需要获取，请修改这里
+    # 地级市及以上城市代码映射（从 admin_codes.py 提取）
     region = {
         '420100': 'city',  # 武汉市
-	}
+    }
         
     # 请不要修改move_type
     # 只抓取迁出情况
@@ -115,7 +117,7 @@ def get_lastdate():
         print('获取API最晚日期时失败')
 
 
-def get_historycurve(region:'420100', move_type:'move_out'):
+def get_historycurve(region: str, move_type: str):
     """
     从API获得一个区域（省或市）的迁入或迁出的迁徙规模指数。historycurve API会直接返回所有日期。存储文件到文件名。
 
@@ -151,7 +153,7 @@ def get_historycurve(region:'420100', move_type:'move_out'):
 
 # http://huiyan.baidu.com/migration/cityrank.jsonp?
 # dt=country&id=0&type=move_in&date=20240130&callback=jsonp_1706674779082_8488633
-def download_and_convert_jsonp(data_type: 'cityrank', dt: 'city', id: '420100', move_type: 'move_out', date: '20190201', callback: 'jsonp_1234567890123'):
+def download_and_convert_jsonp(data_type: str, dt: str, id: str, move_type: str, date: str, callback: str = ''):
     """
     从百度慧眼的API上获得数据并存到本地。
 
@@ -174,8 +176,8 @@ def download_and_convert_jsonp(data_type: 'cityrank', dt: 'city', id: '420100', 
                   f'{translation_table.get(data_type, data_type)}_' \
                   f'{date}.json'
 
-    # Construct the full URL with query parameters
-    url = f'http://huiyan.baidu.com/migration/{data_type}.jsonp?dt={dt}&id={id}&type={move_type}&date={date}&callback={callback}'
+    # Construct the full URL with query parameters (no callback to match endpoint)
+    url = f'http://huiyan.baidu.com/migration/{data_type}.jsonp?dt={dt}&id={id}&type={move_type}&date={date}'
 
     response = requests.get(url)
 
@@ -273,6 +275,13 @@ def get_by_date(from_date, to_date, lastdate):
 
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Baidu Huiyan migration cityrank crawler')
+    parser.add_argument('--from-date', dest='from_date', default='20190201', help='开始日期 YYYYMMDD，默认 20190201')
+    parser.add_argument('--to-date', dest='to_date', default='20190204', help='结束日期 YYYYMMDD，默认 20190204')
+    args = parser.parse_args()
+
     # 确保输出目录存在
     os.makedirs('./data', exist_ok=True)
 
@@ -281,12 +290,8 @@ if __name__ == '__main__':
     if not lastdate:
         raise SystemExit('无法获取最晚日期，程序退出。')
 
-    # 设置起止日期：默认从API支持的最早日期到最晚日期
-    from_date = '20190201'
-    to_date = '20190204'
-
-    # 执行数据抓取
-    get_by_date(from_date, to_date, lastdate)
+    # 执行数据抓取（可通过命令行参数覆盖默认日期）
+    get_by_date(args.from_date, args.to_date, lastdate)
 
 
 
